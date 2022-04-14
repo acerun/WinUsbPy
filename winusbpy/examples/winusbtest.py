@@ -1,4 +1,5 @@
 """Test1: PL2303 serial port user-space driver using WINUSB low level api"""
+
 import time
 from winusbpy import *
 from ctypes import *
@@ -86,11 +87,11 @@ while api.exec_function_setupapi("SetupDiEnumDeviceInterfaces", hdev_info, None,
                                   byref(sp_device_info_data)):
         path = wstring_at(byref(sp_device_interface_detail_data, sizeof(DWORD)))
         if is_device(pl2303_vid, pl2303_pid, path):
-            print("PL 2303 PATH: " + path)
+            print(f"PL 2303 PATH: {path}")
             break
     else:
         error_code = api.exec_function_kernel32("GetLastError")
-        print("Error: " + str(error_code))
+        print(f"Error: {str(error_code)}")
 
     i += 1
     member_index = DWORD(i)
@@ -116,11 +117,11 @@ else:
         result = api.exec_function_winusb("WinUsb_QueryDeviceInformation", handle_winusb, info_type, byref(buff_length),
                                           buff)
         if result != 0:
-            print("Speed: " + str(buff[0]))
+            print(f"Speed: {str(buff[0])}")
 
         else:
             error_code = api.exec_function_kernel32("GetLastError")
-            print("Error Query Device: " + str(error_code))
+            print(f"Error Query Device: {str(error_code)}")
 
         """ Interface Settings """
         response = api.exec_function_winusb("WinUsb_QueryInterfaceSettings", handle_winusb, c_ubyte(0),
@@ -128,9 +129,9 @@ else:
 
         if response == 0:
             error_code = api.exec_function_kernel32("GetLastError")
-            print("Error Query Interface: " + str(error_code))
+            print(f"Error Query Interface: {str(error_code)}")
         if response != 0:
-            print("bLength: " + str(interface_descriptor.b_length))
+            print(f"bLength: {str(interface_descriptor.b_length)}")
             print("bDescriptorType: " + str(interface_descriptor.b_descriptor_type))
             print("bInterfaceNumber: " + str(interface_descriptor.b_interface_number))
             print("bAlternateSetting: " + str(interface_descriptor.b_alternate_setting))
@@ -138,7 +139,7 @@ else:
             print("bInterfaceClass " + str(interface_descriptor.b_interface_class))
             print("bInterfaceSubClass: " + str(interface_descriptor.b_interface_sub_class))
             print("bInterfaceProtocol: " + str(interface_descriptor.b_interface_protocol))
-            print("iInterface: " + str(interface_descriptor.i_interface))
+            print(f"iInterface: {str(interface_descriptor.i_interface)}")
 
             """ Endpoints information """
             i = 0
@@ -148,10 +149,10 @@ else:
                 result = api.exec_function_winusb("WinUsb_QueryPipe", handle_winusb, c_ubyte(0), endpoint_index,
                                                   byref(pipe_info))
                 if result != 0:
-                    print("PipeType: " + str(pipe_info.pipe_type))
-                    print("PipeId: " + str(pipe_info.pipe_id))
+                    print(f"PipeType: {str(pipe_info.pipe_type)}")
+                    print(f"PipeId: {str(pipe_info.pipe_id)}")
                     print("MaximumPacketSize: " + str(pipe_info.maximum_packet_size))
-                    print("Interval: " + str(pipe_info.interval))
+                    print(f"Interval: {str(pipe_info.interval)}")
                 i += 1
                 endpoint_index = c_ubyte(i)
 
@@ -247,4 +248,4 @@ else:
 
     else:
         error_code = api.exec_function_kernel32("GetLastError")
-        print("Error" + str(error_code))
+        print(f"Error{str(error_code)}")
