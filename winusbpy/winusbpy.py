@@ -15,7 +15,7 @@ from .winusbutils import SetupDiGetClassDevs, SetupDiEnumDeviceInterfaces, Setup
 
 
 def is_64bit():
-    return struct.calcsize('P') * 8 == 64
+    return struct.calcsize('P') == 8
 
 
 class WinUsbPy(object):
@@ -47,8 +47,6 @@ class WinUsbPy(object):
         except KeyError:
             if value == 0x00000000:
                 value = 0x00000010
-            pass
-
         flags = DWORD(value)
         self.handle = self.api.exec_function_setupapi(SetupDiGetClassDevs, byref(self.usb_winusb_guid), None, None, flags)
 
@@ -73,10 +71,15 @@ class WinUsbPy(object):
             path = None
             for cb_size in cb_sizes:
                 sp_device_interface_detail_data.cb_size = cb_size
-                ret = self.api.exec_function_setupapi(SetupDiGetDeviceInterfaceDetail, self.handle,
-                                               byref(sp_device_interface_data), byref(sp_device_interface_detail_data),
-                                               required_size, byref(required_size), byref(sp_device_info_data))
-                if ret:
+                if ret := self.api.exec_function_setupapi(
+                    SetupDiGetDeviceInterfaceDetail,
+                    self.handle,
+                    byref(sp_device_interface_data),
+                    byref(sp_device_interface_detail_data),
+                    required_size,
+                    byref(required_size),
+                    byref(sp_device_info_data),
+                ):
                     cb_sizes = (cb_size, )
                     path = wstring_at(byref(sp_device_interface_detail_data, sizeof(DWORD)))
                     break
@@ -113,7 +116,7 @@ class WinUsbPy(object):
         self._name = name
         try:
             ftr = filter(self.find_device, self.device_paths)
-            paths = [p for p in ftr]
+            paths = list(ftr)
             path = self.device_paths[paths[0]]
         except IndexError:
             return False
@@ -147,28 +150,21 @@ class WinUsbPy(object):
         buff_length = c_ulong(sizeof(c_void_p))
         result = self.api.exec_function_winusb(WinUsb_QueryDeviceInformation, self.handle_winusb, info_type,
                                                byref(buff_length), buff)
-        if result != 0:
-            return buff[0]
-        else:
-            return -1
+        return buff[0] if result != 0 else -1
 
     def query_interface_settings(self, index):
-        if self._index != -1:
-            temp_handle_winusb = self.handle_winusb
-            if self._index != 0:
-                result = self.api.exec_function_winusb(WinUsb_GetAssociatedInterface, self.handle_winusb,
-                                                       c_ubyte(index), byref(temp_handle_winusb))
-                if result == 0:
-                    return False
-            interface_descriptor = UsbInterfaceDescriptor()
-            result = self.api.exec_function_winusb(WinUsb_QueryInterfaceSettings, temp_handle_winusb, c_ubyte(0),
-                                                   byref(interface_descriptor))
-            if result != 0:
-                return interface_descriptor
-            else:
-                return None
-        else:
+        if self._index == -1:
             return None
+        temp_handle_winusb = self.handle_winusb
+        if self._index != 0:
+            result = self.api.exec_function_winusb(WinUsb_GetAssociatedInterface, self.handle_winusb,
+                                                   c_ubyte(index), byref(temp_handle_winusb))
+            if result == 0:
+                return False
+        interface_descriptor = UsbInterfaceDescriptor()
+        result = self.api.exec_function_winusb(WinUsb_QueryInterfaceSettings, temp_handle_winusb, c_ubyte(0),
+                                               byref(interface_descriptor))
+        return interface_descriptor if result != 0 else None
 
     def change_interface(self, index):
         result = self.api.exec_function_winusb(WinUsb_GetAssociatedInterface, self.handle_winusb, c_ubyte(index),
@@ -183,23 +179,21 @@ class WinUsbPy(object):
         pipe_info = PipeInfo()
         result = self.api.exec_function_winusb(WinUsb_QueryPipe, self.handle_winusb, c_ubyte(0), pipe_index,
                                                byref(pipe_info))
-        if result != 0:
-            return pipe_info
-        else:
-            return None
+        return pipe_info if result != 0 else None
 
     def control_transfer(self, setup_packet, buff=None):
-        if buff != None:
-            if setup_packet.length > 0:  # Host 2 Device
-                buff = (c_ubyte * setup_packet.length)(*buff)
-                buffer_length = setup_packet.length
-            else:  # Device 2 Host
-                buff = (c_ubyte * setup_packet.length)()
-                buffer_length = setup_packet.length
-        else:
+        if buff is None:
             buff = c_ubyte()
             buffer_length = 0
 
+        else:
+            buff = (
+                (c_ubyte * setup_packet.length)(*buff)
+                if setup_packet.length > 0
+                else (c_ubyte * setup_packet.length)()
+            )
+
+            buffer_length = setup_packet.length
         result = self.api.exec_function_winusb(WinUsb_ControlTransfer, self.handle_winusb, setup_packet, byref(buff),
                                                c_ulong(buffer_length), byref(c_ulong(0)), None)
         return {"result": result != 0, "buffer": [buff]}
@@ -217,14 +211,12 @@ class WinUsbPy(object):
         result = self.api.exec_function_winusb(WinUsb_ReadPipe, self.handle_winusb[self._index], c_ubyte(pipe_id),
                                                read_buffer, c_ulong(length_buffer), byref(read), None)
         if result != 0:
-            if read.value != length_buffer:
-                return read_buffer[:read.value]
-            else:
-                return read_buffer
+            return read_buffer[:read.value] if read.value != length_buffer else read_buffer
         else:
             return None
 
     def set_timeout(self, pipe_id, timeout):
+
         class POLICY_TYPE:
             SHORT_PACKET_TERMINATE = 1
             AUTO_CLEAR_STALL = 2
@@ -237,13 +229,19 @@ class WinUsbPy(object):
         policy_type = c_ulong(POLICY_TYPE.PIPE_TRANSFER_TIMEOUT)
         value_length = c_ulong(4)
         value = c_ulong(int(timeout * 1000))  # in ms
-        result = self.api.exec_function_winusb(WinUsb_SetPipePolicy, self.handle_winusb[self._index], c_ubyte(pipe_id),
-                                               policy_type, value_length, byref(value))
-        return result
+        return self.api.exec_function_winusb(
+            WinUsb_SetPipePolicy,
+            self.handle_winusb[self._index],
+            c_ubyte(pipe_id),
+            policy_type,
+            value_length,
+            byref(value),
+        )
 
     def flush(self, pipe_id):
-        result = self.api.exec_function_winusb(WinUsb_FlushPipe, self.handle_winusb[self._index], c_ubyte(pipe_id))
-        return result
+        return self.api.exec_function_winusb(
+            WinUsb_FlushPipe, self.handle_winusb[self._index], c_ubyte(pipe_id)
+        )
 
     def _overlapped_read_do(self,pipe_id):
         self.olread_ol.Internal = 0
@@ -251,13 +249,10 @@ class WinUsbPy(object):
         self.olread_ol.Offset = 0
         self.olread_ol.OffsetHigh = 0
         self.olread_ol.Pointer = 0
-        self.olread_ol.hEvent = 0                
+        self.olread_ol.hEvent = 0
         result = self.api.exec_function_winusb(WinUsb_ReadPipe, self.handle_winusb, c_ubyte(pipe_id), self.olread_buf, 
                                                c_ulong(self.olread_buflen), byref(c_ulong(0)), byref(self.olread_ol))
-        if result != 0:
-            return True
-        else:
-            return False
+        return result != 0
                 
     def overlapped_read_init(self, pipe_id, length_buffer):
         self.olread_ol = Overlapped()
@@ -270,12 +265,13 @@ class WinUsbPy(object):
         rl = c_ulong(0)
         result = self.api.exec_function_winusb(WinUsb_GetOverlappedResult, self.handle_winusb, byref(self.olread_ol),byref(rl),False)
         if result == 0:
-            if self.get_last_error_code() == ERROR_IO_PENDING or \
-               self.get_last_error_code() == ERROR_IO_INCOMPLETE:
-                return ""
-            else:
-                return None
-        else:
-            ret = str(self.olread_buf[0:rl.value])
-            self._overlapped_read_do(pipe_id)
-            return ret
+            return (
+                ""
+                if self.get_last_error_code()
+                in [ERROR_IO_PENDING, ERROR_IO_INCOMPLETE]
+                else None
+            )
+
+        ret = str(self.olread_buf[:rl.value])
+        self._overlapped_read_do(pipe_id)
+        return ret

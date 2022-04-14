@@ -1,4 +1,5 @@
 """Test2: PL2303 serial port user-space driver using WINUSB high level api"""
+
 import time
 from winusbpy import *
 
@@ -47,19 +48,18 @@ tx12 = b"\x00"
 """ WinUsbPy  """
 
 api = WinUsbPy()
-result = api.list_usb_devices(deviceinterface=True, present=True)
-if result:
+if result := api.list_usb_devices(deviceinterface=True, present=True):
     if api.init_winusb_device(pl2303_vid, pl2303_pid):
         speed = api.query_device_info(query=1)
         if speed != -1:
-            print("Device Speed: " + str(speed))
+            print(f"Device Speed: {str(speed)}")
         else:
             print("Device speed could not be obtained")
 
         interface_descriptor = api.query_interface_settings(0)
 
         if interface_descriptor != None:
-            print("bLength: " + str(interface_descriptor.b_length))
+            print(f"bLength: {str(interface_descriptor.b_length)}")
             print("bDescriptorType: " + str(interface_descriptor.b_descriptor_type))
             print("bInterfaceNumber: " + str(interface_descriptor.b_interface_number))
             print("bAlternateSetting: " + str(interface_descriptor.b_alternate_setting))
@@ -67,14 +67,14 @@ if result:
             print("bInterfaceClass " + str(interface_descriptor.b_interface_class))
             print("bInterfaceSubClass: " + str(interface_descriptor.b_interface_sub_class))
             print("bInterfaceProtocol: " + str(interface_descriptor.b_interface_protocol))
-            print("iInterface: " + str(interface_descriptor.i_interface))
+            print(f"iInterface: {str(interface_descriptor.i_interface)}")
 
         pipe_info_list = map(api.query_pipe, range(interface_descriptor.b_num_endpoints))
         for item in pipe_info_list:
-            print("PipeType: " + str(item.pipe_type))
-            print("PipeId: " + str(item.pipe_id))
-            print("MaximumPacketSize: " + str(item.maximum_packet_size))
-            print("Interval: " + str(item.interval))
+            print(f"PipeType: {str(item.pipe_type)}")
+            print(f"PipeId: {str(item.pipe_id)}")
+            print(f"MaximumPacketSize: {str(item.maximum_packet_size)}")
+            print(f"Interval: {str(item.interval)}")
 
         """
         buff = None -> Buffer length will be zero. No data expected
